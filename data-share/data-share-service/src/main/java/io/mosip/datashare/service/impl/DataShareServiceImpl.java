@@ -189,11 +189,9 @@ public class DataShareServiceImpl implements DataShareService {
 				}
 				Map<String, Object> aclMap = prepareMetaData(subscriberId, policyId, dataSharePolicy,
 						jwtSignature, policyPublishDate);
-				randomShareKey = storefile(aclMap, new ByteArrayInputStream(encryptedData), policyId, subscriberId);
+				randomShareKey = storefile(aclMap, encryptedData, policyId, subscriberId);
 				String dataShareUrl = constructURL(randomShareKey, dataSharePolicy, policyId,
 						subscriberId);
-
-
 				dataShare.setUrl(dataShareUrl);
 				dataShare.setPolicyId(policyId);
 				dataShare.setSubscriberId(subscriberId);
@@ -222,7 +220,6 @@ public class DataShareServiceImpl implements DataShareService {
 	 * Construct URL.
 	 *
 	 * @param randomShareKey the random share key
-	 * @param shareDomain    the share domain
 	 * @param policyId       the policy id
 	 * @param subscriberId   the subscriber id
 	 * @return the string
@@ -381,13 +378,16 @@ public class DataShareServiceImpl implements DataShareService {
 	 * Storefile.
 	 *
 	 * @param metaDataMap  the meta data map
-	 * @param filedata     the filedata
 	 * @param policyId     the policy id
 	 * @param subscriberId the subscriber id
 	 * @return the string
 	 */
-	private String storefile(Map<String, Object> metaDataMap, InputStream filedata, String policyId,
+	private String storefile(
+			Map<String, Object> metaDataMap,
+			byte[] fileBytes,
+			String policyId,
 			String subscriberId) {
+
 		int length = DEFAULT_KEY_LENGTH;
 		if (env.getProperty(KEY_LENGTH) != null) {
 			length = Integer.parseInt(env.getProperty(KEY_LENGTH));
@@ -396,15 +396,36 @@ public class DataShareServiceImpl implements DataShareService {
 		String randomShareKey = subscriberId + policyId
 				+ DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(LocalDateTime.now())
 				+ generateShortRandomShareKey(length);
-		boolean isDataStored = objectStoreAdapter.putObject(subscriberId, policyId, null, null, randomShareKey,
-				filedata);
-		objectStoreAdapter.addObjectMetaData(subscriberId, policyId, null, null, randomShareKey, metaDataMap);
-		LOGGER.info(LoggerFileConstant.SESSIONID.toString(), LoggerFileConstant.POLICYID.toString(), randomShareKey,
-				"Is data stored to object store" + isDataStored);
+
+		// ✅ Length is now implicitly known to SDK
+		InputStream dataStream = new ByteArrayInputStream(fileBytes);
+
+		boolean isDataStored = objectStoreAdapter.putObject(
+				subscriberId,
+				policyId,
+				null,
+				null,
+				randomShareKey,
+				dataStream
+		);
+
+		objectStoreAdapter.addObjectMetaData(
+				subscriberId,
+				policyId,
+				null,
+				null,
+				randomShareKey,
+				metaDataMap
+		);
+
+		LOGGER.info(LoggerFileConstant.SESSIONID.toString(),
+				LoggerFileConstant.POLICYID.toString(),
+				randomShareKey,
+				"Is data stored to object store " + isDataStored);
 
 		return randomShareKey;
-
 	}
+
 
 	/*
 	 * (non-Javadoc)
